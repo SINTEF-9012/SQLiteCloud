@@ -12,18 +12,7 @@ var express = require('express'),
 
 var sqliteDbPath = process.env.DB_PATH || "SqliteCloud.db";
 
-// It's very secure by default
-var privateKey = process.env.PRIVATE_KEY;
-if (!privateKey) {
-    privateKey = require('generate-password').generate({
-        length: 30,
-        numbers: true
-    });
-
-    console.log("-----------------------------------------------------\n"+
-        "Generated private key: "+privateKey+
-        "\n-----------------------------------------------------\n");
-}
+var privateKey = require('./privateKey')();
 
 var db = new sqlite3.Database(sqliteDbPath);
 
@@ -118,7 +107,7 @@ app.get(/^\/(get|all)$/, function(req, res) {
     }
 
     if (/^\s*(create|update|delete)\s+/i.test(sql)) {
-        res.status(400).json({error: 'Use POST to change the database'});
+        res.status(400).json({error: 'Use POST to modify the database'});
         return;
     }
 
