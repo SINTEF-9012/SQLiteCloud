@@ -1,10 +1,10 @@
 var express = require('express'),
     compression = require('compression'),
     morgan = require('morgan'),
-    async = require('async'),
     cors = require('cors'),
     basicAuth = require('basic-auth-connect'),
-    httpProxy = require('http-proxy'),
+    rwlock = require('rwlock'),
+    request = require('request'),
     _ = require('lodash');
 
 var privateKey = require('./privateKey')();
@@ -24,6 +24,8 @@ app.use(basicAuth(function(user, pass) {
     return pass === privateKey;
 }));
 
+var lock = new rwlock();
+
 var leafs = [{
     path: 'http://localhost:8082/leaf'
 },
@@ -31,30 +33,60 @@ var leafs = [{
     path: 'http://localhost:8080/leaf'
 }];
 
-leafs.forEach(function(leaf) {
-
-    var proxy = httpProxy.createProxyServer();
-    proxy.on('error', function(err, req, res) {
-        console.log('Error while contacting '+leaf.path);
-        console.log('This leaf is removed');
-        _.pull(leafs, leaf);
-        res.status(502).json({error: err});
-    });
-
-    leaf.proxy = proxy;
-});
-
-var dispatchGet = function(req, res) {
+var dispatchGet = function(req, res, release) {
     var selectedLeaf = _.sample(leafs);
     if (!selectedLeaf) {
         res.status(503).json({error: "No leaf server is available"});
+        release();
+        return;
     }
-    selectedLeaf.proxy.web(req, res, {target: selectedLeaf.path});
+
+    var stream = request.get(selectedLeaf.path+req.url).auth(req.user, privateKey, true);
+
+    stream.on('error', function(err) {
+        console.log('Error while contacting '+selectedLeaf.path);
+        console.log('This leaf is removed');
+
+        _.pull(leafs, selectedLeaf);
+
+
+        if (req.nbDispatchRetry > 3) {
+            console.log('3 retries and still no one leaf server is available')
+            res.status(503).json({error: "No leaf server is available"});
+            release();
+            return;
+        }
+
+        console.log('We will try again');
+        req.nbDispatchRetry = ++req.nbDispatchRetry || 1;
+        dispatchGet(req, res, release);
+        
+    }).on('response', function(response) {
+        stream.pipe(res);
+        stream.on('end', release);
+    });
 };
 
-app.get('/', dispatchGet)
-   .get('/dump', dispatchGet)
-   .get(/^\/(get|all)$/, dispatchGet);
+var lockDispatchGet = function(req, res) {
+    lock.readLock(function(release) {
+        dispatchGet(req, res, release);
+    });
+};
+
+
+var dispatchPost = function(req, res, release) {
+    // todo
+};
+
+var lockDispatchPost = function(req, res) {
+    lock.writeLock(function(release) {
+        dispatchPost(req, res, release);
+    });
+};
+
+app.get('/', lockDispatchGet)
+   .get('/dump', lockDispatchGet)
+   .get(/^\/(get|all)$/, lockDispatchGet);
 
 var serverHostName = process.env.HTTP_HOSTNAME || '0.0.0.0';
 var serverPort = process.env.HTTP_PORT || 8081;
