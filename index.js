@@ -10,7 +10,7 @@ var express = require('express'),
     child_process = require('child_process'),
     fs = require("fs");
 
-var sqliteDbPath = process.env.DB_PATH || "SqliteCloud.db";
+var sqliteDbPath = process.env.DB_PATH || "SQLiteCloud.db";
 
 var privateKey = require('./privateKey')();
 
@@ -29,7 +29,7 @@ app.use(basicAuth(function(user, pass) {
     return pass === privateKey;
 }));
 
-app.get('/', function(req, res) {
+app.get('/leaf', function(req, res) {
     // This could be sensitive data but it's not like exposing
     // SQLite to internet was safe to begin with
 
@@ -57,7 +57,7 @@ var dumpWorker = async.queue(function(task, callback) {
 
 var dumpTimeout = Math.min(Math.round(process.env.DUMP_TIMEOUT || 30000), 0);
 
-app.get('/dump', function(req, res) {
+app.get('/leaf/dump', function(req, res) {
     dumpWorker.push(function(callback) {
         var dumpProcess = child_process.spawn('sqlite3', [sqliteDbPath, '.dump'], {
             timeout: dumpTimeout
@@ -98,7 +98,7 @@ var execute = function(sql, method, params, res) {
     }
 };
 
-app.get(/^\/(get|all)$/, function(req, res) {
+app.get(/^\/leaf\/(get|all)$/, function(req, res) {
     var sql = req.query.sql;
 
     if (!sql) {
@@ -107,20 +107,20 @@ app.get(/^\/(get|all)$/, function(req, res) {
     }
 
     if (/^\s*(create|update|delete)\s+/i.test(sql)) {
-        res.status(400).json({error: 'Use POST to modify the database'});
+        res.status(400).json({error: 'Use POST requests to modify the database'});
         return;
     }
 
     delete req.query.sql;
 
-    var method = req.url.match(/^\/(get|all)/)[1];
+    var method = req.url.match(/^\/leaf\/(get|all)/)[1];
     execute(sql, method, req.query, res);
 });
 
 var textParser = bodyParser.text();
 var jsonParser = bodyParser.json();
 
-app.post(/^\/(exec|get|all|run)$/, jsonParser, textParser, function(req, res){
+app.post(/^\/leaf\/(exec|get|all|run)$/, jsonParser, textParser, function(req, res){
     var sql = typeof req.body === 'object' ? req.body.sql : req.body;
 
     if (!sql) {
@@ -128,7 +128,7 @@ app.post(/^\/(exec|get|all|run)$/, jsonParser, textParser, function(req, res){
         return;
     }
 
-    var method = req.url.match(/^\/(exec|get|all|run)/)[1];
+    var method = req.url.match(/^\/leaf\/(exec|get|all|run)/)[1];
     execute(sql, method, req.body.params, res);
 });
 
