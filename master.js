@@ -63,7 +63,7 @@ var dispatchGet = function(req, res, release) {
         
     }).on('response', function(response) {
         stream.pipe(res);
-        stream.on('end', release);
+        release();
     });
 };
 
