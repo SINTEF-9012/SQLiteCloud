@@ -50,6 +50,8 @@ var dispatchGet = function(req, res, release) {
         _.pull(leafs, selectedLeaf);
 
 
+        req.nbDispatchRetry = ++req.nbDispatchRetry || 1;
+        
         if (req.nbDispatchRetry > 3) {
             console.log('3 retries and still no one leaf server is available')
             res.status(503).json({error: "No leaf server is available"});
@@ -58,7 +60,7 @@ var dispatchGet = function(req, res, release) {
         }
 
         console.log('We will try again');
-        req.nbDispatchRetry = ++req.nbDispatchRetry || 1;
+        
         dispatchGet(req, res, release);
         
     }).on('response', function(response) {
