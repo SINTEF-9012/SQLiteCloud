@@ -1,0 +1,6 @@
+{
+    "sql": "SELECT COUNT(*) FROM tableTest WHERE city = ?",
+    "params": {
+        "1": "Nice"
+    }
+}
